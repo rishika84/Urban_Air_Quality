@@ -1,1 +1,1 @@
-web: panel serve panel_air_quality_dashboard.py --address 0.0.0.0 --port $PORT --allow-websocket-origin=* --show 
+web: panel serve panel_air_quality_dashboard.py --address 0.0.0.0 --port $PORT --allow-websocket-origin=* --show --autoreload 

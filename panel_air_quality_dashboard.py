@@ -2680,6 +2680,9 @@ def update_graph_header(city):
     graph_header.object = create_graph_header(city)
 
 # --- RUN DASHBOARD ---
+# Make dashboard servable
+dashboard.servable()
+
 if __name__ == '__main__':
     dashboard.show()
 else:
