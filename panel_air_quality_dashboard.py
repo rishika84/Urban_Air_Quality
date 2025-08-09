@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 # Configure Panel with memory optimizations
 pn.extension('plotly', sizing_mode='stretch_width')
-pn.config.cache = False  # Disable caching to save memory on free tier
+# Cache disabled by removing @pn.cache decorators for memory efficiency
 
 # Environment configuration for deployment
 PORT = int(os.environ.get('PORT', 5006))
