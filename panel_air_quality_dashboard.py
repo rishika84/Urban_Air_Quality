@@ -8,8 +8,9 @@ import numpy as np
 import os
 from datetime import datetime, timedelta
 
-# Configure Panel
+# Configure Panel with memory optimizations
 pn.extension('plotly', sizing_mode='stretch_width')
+pn.config.cache = False  # Disable caching to save memory on free tier
 
 # Environment configuration for deployment
 PORT = int(os.environ.get('PORT', 5006))
@@ -20,31 +21,58 @@ ALLOW_WEBSOCKET_ORIGIN = os.environ.get('PANEL_ALLOW_WEBSOCKET_ORIGIN', '*')
 selected_pollutant = 'AQI'
 current_view = 'dashboard'
 
-# --- DATA LOADING FUNCTIONS ---
-@pn.cache
+# --- OPTIMIZED DATA LOADING FUNCTIONS ---
 def load_latest_data():
-    """Load latest air quality data from SQLite database"""
+    """Load latest air quality data from SQLite database - optimized for memory"""
     conn = sqlite3.connect("air_quality.sqlite")
-    df = pd.read_sql_query("SELECT * FROM defra_uk_air_quality", conn)
-    conn.close()
-    df["datetime"] = pd.to_datetime(df["datetime"])
-    # Get latest for each site
-    latest = df.sort_values("datetime").groupby("site").tail(1)
-    return latest
-
-@pn.cache
-def load_historical_data():
-    """Load historical data for trends"""
-    conn = sqlite3.connect("air_quality.sqlite")
-    df = pd.read_sql_query("SELECT * FROM defra_uk_air_quality", conn)
+    # Only get the latest reading for each site using SQL to reduce memory usage
+    query = """
+    SELECT * FROM defra_uk_air_quality 
+    WHERE (site, datetime) IN (
+        SELECT site, MAX(datetime) 
+        FROM defra_uk_air_quality 
+        GROUP BY site
+    )
+    """
+    df = pd.read_sql_query(query, conn)
     conn.close()
     df["datetime"] = pd.to_datetime(df["datetime"])
     return df
 
-# Load data
+def load_historical_data_sample(site=None, limit=1000):
+    """Load sampled historical data for trends - memory optimized"""
+    conn = sqlite3.connect("air_quality.sqlite")
+    if site:
+        # Load recent data for specific site
+        query = """
+        SELECT * FROM defra_uk_air_quality 
+        WHERE site = ? 
+        ORDER BY datetime DESC 
+        LIMIT ?
+        """
+        df = pd.read_sql_query(query, conn, params=(site, limit))
+    else:
+        # Load sample of recent data across all sites
+        query = """
+        SELECT * FROM defra_uk_air_quality 
+        ORDER BY datetime DESC 
+        LIMIT ?
+        """
+        df = pd.read_sql_query(query, conn, params=(limit,))
+    conn.close()
+    df["datetime"] = pd.to_datetime(df["datetime"])
+    return df.sort_values("datetime")
+
+def get_cities_list():
+    """Get list of cities without loading full dataset"""
+    conn = sqlite3.connect("air_quality.sqlite")
+    cities_df = pd.read_sql_query("SELECT DISTINCT site FROM defra_uk_air_quality ORDER BY site", conn)
+    conn.close()
+    return sorted(cities_df["site"].tolist())
+
+# Load minimal data at startup
 latest_data = load_latest_data()
-historical_data = load_historical_data()
-cities = sorted(latest_data["site"].unique())
+cities = get_cities_list()
 
 # --- AQI CALCULATION FUNCTIONS ---
 def calc_aqi(pm25):
@@ -318,8 +346,8 @@ def create_map(city=None):
 def generate_monthly_graph_from_real_data(city, pollutant):
     """Generate monthly aggregated graph from real database data"""
     try:
-        # Load historical data
-        df = load_historical_data()
+        # Load historical data (sampled for memory efficiency)
+        df = load_historical_data_sample(limit=2000)
         city_data = df[df['site'] == city].copy()
         
         if len(city_data) == 0:
@@ -382,8 +410,8 @@ def generate_monthly_graph_from_real_data(city, pollutant):
 
 def create_detailed_pollutant_view(city, pollutant):
     """Create detailed pollutant view with real historical data from database"""
-    # Load historical data for the specific city and pollutant
-    df = load_historical_data()
+    # Load historical data for the specific city and pollutant (sampled for memory efficiency)
+    df = load_historical_data_sample(site=city, limit=1500)
     city_data = df[df['site'] == city].copy()
     
     # Get latest data for current values
@@ -1009,11 +1037,12 @@ def create_aqi_card(city):
 # --- TREND CHARTS ---
 def create_trend_chart(city, time_range):
     """Create AQI trend chart"""
-    if city not in historical_data['site'].values:
-        return go.Figure()
+    # Load historical data for the specific city (memory optimized)
+    df = load_historical_data_sample(site=city, limit=1000)
+    city_data = df[df['site'] == city].copy()
     
-    # Filter data for selected city and time range
-    city_data = historical_data[historical_data['site'] == city].copy()
+    if city_data.empty:
+        return go.Figure()
     
     if time_range == 'Last 24 Hours':
         cutoff = datetime.now() - timedelta(hours=24)
@@ -1142,8 +1171,8 @@ def create_historical_aqi_graph(city):
     if not city:
         return None
     
-    # Get historical data for the city
-    df = load_historical_data()
+    # Get historical data for the city (sampled for memory efficiency)
+    df = load_historical_data_sample(site=city, limit=1000)
     city_data = df[df['site'] == city].copy()
     
     if city_data.empty:
