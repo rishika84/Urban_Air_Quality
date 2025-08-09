@@ -5,10 +5,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
+import os
 from datetime import datetime, timedelta
 
 # Configure Panel
 pn.extension('plotly', sizing_mode='stretch_width')
+
+# Environment configuration for deployment
+PORT = int(os.environ.get('PORT', 5006))
+ALLOW_WEBSOCKET_ORIGIN = os.environ.get('PANEL_ALLOW_WEBSOCKET_ORIGIN', '*')
 
 # --- STATE MANAGEMENT ---
 # Track selected pollutant for detailed view - using simple variables
